@@ -5,9 +5,9 @@ date = 2024-05-17
 
 Spinning up a k8s cluster is easier than ever, but there are a ton of options and there are some trade offs. I tend nowadays to focus on the [k3s](https://k3s.io/) stack as there are a number of ways to use it.
 
-* [Generic Install](https://k3s.io/) which works everywhere except Mac
-* Dev focused on your notebook using [k3d](https://k3d.io/v5.6.3/) 
-* Building a cluster [k3sup](https://github.com/alexellis/k3sup) which is what I'm going to cover here
+* [Generic Install](https://k3s.io/) which works everywhere except Mac.. so we're aren't going to cover that.
+* Dev focused on your notebook using [k3d](https://k3d.io/v5.6.3/) which is pretty easy, but not for real clusters.
+* [k3sup](https://github.com/alexellis/k3sup) works everywhere which is what I'm going to cover here
 
 ## Spinning up cloud instances
 
