@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+      <meta http-equiv="X-UA-Compatible" content="IE=edge">
+      <meta http-equiv="content-type" content="text/html; charset=utf-8">
+
+      <!-- Enable responsiveness on mobile devices-->
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    
+      
+    
+
+      <title></title>
+
+      
+
+      
+          <link rel="stylesheet" href="https://rsvihladremio.github.io/site.css">
+      
+
+      
+      
+    </head>
+
+    <body class="hack dark main container">
+        
+    
+        
+                
+            
+    
+
+<article itemscope itemtype="http://schema.org/BlogPosting">
+    <header>
+        <h1 itemprop="headline">Python, Arrow Flight and Dremio Cloud</h1>
+        <span class="muted">
+    <svg class="icon i-clock" viewBox="0 0 32 32"
+         width="16" height="16" fill="none" stroke="currentcolor"
+         stroke-linecap="round" stroke-linejoin="round" stroke-width="6.25%">
+        <circle cx="16" cy="16" r="14"/>
+        <path d="M16 8 L16 16 20 20"/>
+    </svg>
+    <span>4 minute read</span>
+    <svg class="icon i-edit" viewBox="0 0 32 32"
+         width="16" height="16" fill="none" stroke="currentcolor"
+         stroke-linecap="round" stroke-linejoin="round" stroke-width="6.25%">
+        <path d="M30 7 L25 2 5 22 3 29 10 27 Z M21 6 L26 11 Z M5 22 L10 27 Z"/>
+    </svg>
+
+    Published: 2024-05-21
+</span>
+    </header>
+    <div itemprop="articleBody">
+      <h2 id="odbc-m1-mac-pain">ODBC+M1 Mac pain</h2>
+<p>Connect to Dremio Cloud from Python is challenging for certain platforms namely the M1 mac. When using ODBC on Apple Silicon one needs to:</p>
+<ul>
+<li>Install Rosetta <code>/usr/sbin/softwareupdate --install-rosetta --agree-to-license</code></li>
+<li>Install homebrew as amd64 <code>arch -x86_64 /bin/bash -c &quot;$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)&quot;</code></li>
+<li>Using the same trick install Python <code>arch -x86_64 /usr/local/bin/brew install python</code></li>
+<li>Install PyODBC <code>pip install pyodbc</code></li>
+<li>Install <a href="https://www.dremio.com/drivers/odbc/">Dremio Mac driver</a></li>
+<li>Figure out the magic incantation for the connection string including referencing your driver correctly.</li>
+</ul>
+<h2 id="jdbc-cross-platform-but-limited">JDBC Cross-Platform but Limited</h2>
+<p><a href="https://pypi.org/project/JayDeBeApi/">JayDeBeAPI</a> at least is available and does some amazing slight of hand using <a href="https://jpype.readthedocs.io/en/latest/">JPype</a> to permit easy access to JDBC drivers into Python.
+This effectively solves the cross platform development challenges. But it hasn't been updated in 3 years and does not work with JDK 9+. </p>
+<ul>
+<li>Install JDK 8 <a href="https://github.com/baztian/jaydebeapi/pull/116">since one cannot easily pass through JVM settings</a></li>
+<li>Download <a href="https://www.dremio.com/drivers/jdbc/">The JDBC driver</a></li>
+<li>Install JayDeBeAPI `pip install jaydebeapi'</li>
+<li>Make sure you <a href="https://github.com/baztian/jaydebeapi/issues/238">get the initialization correct or else you get a lot of errors</a></li>
+<li>Figure out again the magic incantation for the connection string and how it translates through JayDeBeAPI.</li>
+</ul>
+<h2 id="trivial-with-arrow-flight">Trivial with Arrow Flight</h2>
+<p>Since the ODBC and JDBC drivers are just clients implementing the Arrow Flight protocol I figured I'd look into a native client version and see if I can get more flexibility in my deployment model and better throughput. The steps looked like this</p>
+<ul>
+<li>Install pyarrow <code>pip install pyarrow</code></li>
+<li>Delete a bunch of row mapping code and end up with some pretty compact code overall.</li>
+</ul>
+<p>That's it! I got the following benefits</p>
+<ul>
+<li>Faster multi-threaded performance for queries</li>
+<li>Smaller Docker image</li>
+<li>Less overall lines of code (row mapping is a treat in PyArrow)</li>
+<li>Easy options to output to <a href="https://arrow.apache.org/docs/python/generated/pyarrow.Table.html#pyarrow.Table.to_pandas">Pandas</a>, <a href="https://arrow.apache.org/docs/python/generated/pyarrow.Table.html#pyarrow.Table.to_pylist">Python objects</a>, etc.</li>
+</ul>
+<p>Below you can see the code change needed, but even if the code was worse, or terrible, with the deployment story everything is so much more maintainable it's hard to see why I would go back.</p>
+<h3 id="query-code-with-jaydebeapi">Query code with JayDeBeAPI</h3>
+<pre data-lang="python" style="background-color:#2b303b;color:#c0c5ce;" class="language-python "><code class="language-python" data-lang="python"><span style="color:#b48ead;">import </span><span>jaydebeapi
+</span><span>
+</span><span style="color:#65737e;">## escape token
+</span><span>safe_token = urllib.parse.</span><span style="color:#bf616a;">quote_plus</span><span>(token)
+</span><span>
+</span><span style="color:#65737e;">## connect: note connection string and jar reference
+</span><span>conn = jaydebeapi.</span><span style="color:#bf616a;">connect</span><span>(
+</span><span>            &quot;</span><span style="color:#a3be8c;">org.apache.arrow.driver.jdbc.ArrowFlightJdbcDriver</span><span>&quot;,
+</span><span>            </span><span style="color:#b48ead;">f</span><span>&quot;</span><span style="color:#a3be8c;">jdbc:arrow-flight-sql://data.eu.dremio.cloud:443/?useEncryption=true&amp;useSystemTrustStore=true&amp;disableCertificateVerification=true&amp;token=</span><span>{safe_token}&quot;,
+</span><span>            {},
+</span><span>            &quot;</span><span style="color:#a3be8c;">flight-sql-jdbc-driver-10.0.0.jar</span><span>&quot;,
+</span><span>        )
+</span><span style="color:#65737e;">## Create a return object to map too
+</span><span>results: list[dict[str, object]] = []
+</span><span style="color:#65737e;">## Open cursor
+</span><span style="color:#b48ead;">with </span><span>conn.</span><span style="color:#bf616a;">cursor</span><span>() </span><span style="color:#b48ead;">as </span><span>cur:
+</span><span>    </span><span style="color:#65737e;">## Execute query
+</span><span>    cur.</span><span style="color:#bf616a;">execute</span><span>(query)
+</span><span>    </span><span style="color:#65737e;">## we need cursor description or we won&#39;t know the column names
+</span><span>    </span><span style="color:#b48ead;">if </span><span>cur.description is </span><span style="color:#d08770;">None</span><span>:
+</span><span>        </span><span style="color:#b48ead;">raise </span><span style="color:#bf616a;">ValueError</span><span>(
+</span><span>                    &quot;</span><span style="color:#a3be8c;">cursor description is none, this is a critical error and indicates a bug in the jdbc driver</span><span>&quot;
+</span><span>        )
+</span><span>    </span><span style="color:#65737e;">## Map based on cursor description the column names
+</span><span>    columns = [column[</span><span style="color:#d08770;">0</span><span>] </span><span style="color:#b48ead;">for </span><span>column </span><span style="color:#b48ead;">in </span><span>cur.description]
+</span><span>    </span><span style="color:#65737e;">## Iterate through results
+</span><span>    </span><span style="color:#b48ead;">for </span><span>row </span><span style="color:#b48ead;">in </span><span>cur.</span><span style="color:#bf616a;">fetchall</span><span>():
+</span><span>        results.</span><span style="color:#bf616a;">append</span><span>(</span><span style="color:#bf616a;">dict</span><span>(</span><span style="color:#96b5b4;">zip</span><span>(columns, row)))
+</span><span>    </span><span style="color:#65737e;">## Finally return the results
+</span><span>    </span><span style="color:#b48ead;">return </span><span>results
+</span></code></pre>
+<h3 id="query-code-with-pyarrow">Query code with PyArrow</h3>
+<p>What lines of code we add in query setup, we get back in automapping of result set and we get an easier connection string to boot.</p>
+<pre data-lang="python" style="background-color:#2b303b;color:#c0c5ce;" class="language-python "><code class="language-python" data-lang="python"><span style="color:#b48ead;">from </span><span>pyarrow </span><span style="color:#b48ead;">import </span><span>flight
+</span><span style="color:#b48ead;">from </span><span>pyarrow.flight </span><span style="color:#b48ead;">import </span><span>FlightClient
+</span><span>
+</span><span style="color:#65737e;">## Create Arrow Flight Client
+</span><span style="color:#65737e;">#location = &quot;grpc+tls://data.dremio.cloud:443&quot; # US
+</span><span>location = &quot;</span><span style="color:#a3be8c;">grpc+tls://data.eu.dremio.cloud:443</span><span>&quot; </span><span style="color:#65737e;"># EU
+</span><span>client = </span><span style="color:#bf616a;">FlightClient</span><span>(</span><span style="color:#bf616a;">location</span><span>=(location))
+</span><span>
+</span><span style="color:#65737e;">## Create Flight Call Options
+</span><span>headers = [(</span><span style="color:#b48ead;">b</span><span>&quot;</span><span style="color:#a3be8c;">authorization</span><span>&quot;, </span><span style="color:#b48ead;">f</span><span>&quot;</span><span style="color:#a3be8c;">bearer </span><span>{token}&quot;.</span><span style="color:#bf616a;">encode</span><span>(&quot;</span><span style="color:#a3be8c;">utf-8</span><span>&quot;))]
+</span><span>options = flight.</span><span style="color:#bf616a;">FlightCallOptions</span><span>(</span><span style="color:#bf616a;">headers</span><span>=headers)
+</span><span>
+</span><span> </span><span style="color:#65737e;">## Send Query
+</span><span>flight_info = client.</span><span style="color:#bf616a;">get_flight_info</span><span>(
+</span><span>    flight.FlightDescriptor.</span><span style="color:#bf616a;">for_command</span><span>(query), options
+</span><span>)
+</span><span>
+</span><span style="color:#65737e;">## Get Query Results
+</span><span>query_result = client.</span><span style="color:#bf616a;">do_get</span><span>(flight_info.endpoints[</span><span style="color:#d08770;">0</span><span>].ticket, options)
+</span><span style="color:#65737e;">## Read them to a table
+</span><span>table = query_result.</span><span style="color:#bf616a;">read_all</span><span>()
+</span><span style="color:#65737e;">## Convert them to a list or rows
+</span><span style="color:#b48ead;">return </span><span>table.</span><span style="color:#bf616a;">to_pylist</span><span>()
+</span></code></pre>
+
+    </div>
+
+    
+        <footer>
+            <hr>
+            <p>
+                
+                
+                
+            </p>
+            
+            
+        </footer>
+    
+</article>
+
+
+    </body>
+
+</html>
