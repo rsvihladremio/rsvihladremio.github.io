@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+      <meta http-equiv="X-UA-Compatible" content="IE=edge">
+      <meta http-equiv="content-type" content="text/html; charset=utf-8">
+
+      <!-- Enable responsiveness on mobile devices-->
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    
+      
+    
+
+      <title></title>
+
+      
+
+      
+          <link rel="stylesheet" href="https://rsvihladremio.github.io/site.css">
+      
+
+      
+      
+    </head>
+
+    <body class="hack dark main container">
+        
+    
+        
+                
+            
+    
+
+<article itemscope itemtype="http://schema.org/BlogPosting">
+    <header>
+        <h1 itemprop="headline">Helm --set Will Surprise You</h1>
+        <span class="muted">
+    <svg class="icon i-clock" viewBox="0 0 32 32"
+         width="16" height="16" fill="none" stroke="currentcolor"
+         stroke-linecap="round" stroke-linejoin="round" stroke-width="6.25%">
+        <circle cx="16" cy="16" r="14"/>
+        <path d="M16 8 L16 16 20 20"/>
+    </svg>
+    <span>4 minute read</span>
+    <svg class="icon i-edit" viewBox="0 0 32 32"
+         width="16" height="16" fill="none" stroke="currentcolor"
+         stroke-linecap="round" stroke-linejoin="round" stroke-width="6.25%">
+        <path d="M30 7 L25 2 5 22 3 29 10 27 Z M21 6 L26 11 Z M5 22 L10 27 Z"/>
+    </svg>
+
+    Published: 2024-07-05
+</span>
+    </header>
+    <div itemprop="articleBody">
+      <h2 id="history">History</h2>
+<p>I have a long tortured history with Helm. I was at a tiny startup many years ago that only wanted to use the latest and greatest for our core product (this was a bad idea btw). I was tasked with implementing a feature using the very bleeding edge <a href="https://www.openservicebrokerapi.org/">Open Service Broker API</a> (this was 2016 mind you), and adding support for custom Helm charts to be uploaded to the catalog. This got nowhere quickly, as just getting things to compile back then was complicated.</p>
+<p>I being the sort of &quot;get it done&quot; type of developer who sometimes will do horrible things to ship, I jettisoned Open Service Broker API and settled on the advanced pattern of &quot;just using Helm&quot; so I wrote a service that just shelled out to Helm:</p>
+<ul>
+<li>The customer would be presented with a list of charts to pick from, as well as they were given an upload box for their custom helm charts.</li>
+<li>I would populate a form from the options and values in the values.yaml</li>
+<li>The customer could then pass whatever configuration options they wanted and click deploy</li>
+<li>On the backend i'd read the options passed and use --set with the option key and custom value to pass them onto Helm. Effectively I called `helm install my-deployment --set myoption=1 ./chartdir. Suprisingly to everyone, myself included, this worked <em>very</em> <em>well</em>.</li>
+</ul>
+<p>This experienced turned out to be useful, the startup died under the weight of of hot bleeding edge tech and an MVP with endless feature lists, but the skills I learned with Go, Kubernetes, and Helm paid my bills in the years to come. I ended up being &quot;an expert&quot; in these technologies mostly by virtue of having done a bunch of stupid things early on in the hype cycle.</p>
+<h3 id="bad-habits">Bad Habits</h3>
+<p>With my success using <code>--set</code> I got very much in the habit of just using values.yaml as a defaults file and then overriding it with <code>--set</code> for all deployments. I would even script this or automate this as much as possible. </p>
+<p>However, at some point I wanted to get away from people running custom scripts to use an industry standard tool, about a month ago I removed the scripts and just started documenting how to run Helm in my projects. I was proud to follow industry practice. But then I got lots of the following after upgrades:</p>
+<pre data-lang="bash" style="background-color:#2b303b;color:#c0c5ce;" class="language-bash "><code class="language-bash" data-lang="bash"><span style="color:#bf616a;">kubectl</span><span> get pods</span><span style="color:#bf616a;"> -n</span><span> myns
+</span><span style="color:#bf616a;">NAME</span><span>                          READY   STATUS             RESTARTS   AGE
+</span><span style="color:#bf616a;">my-deployment-66b97b646f-bxg8f</span><span>   0/1     ImagePullBackOff   0          83s
+</span><span style="color:#bf616a;">my-deployment-bcd586b45-mpnpd</span><span>    1/1     Running            0          42h
+</span></code></pre>
+<p>When I'd go to look at the deployment, I would see an old image name (that was no longer valid) or some other stale configuration.</p>
+<pre data-lang="bash" style="background-color:#2b303b;color:#c0c5ce;" class="language-bash "><code class="language-bash" data-lang="bash"><span> </span><span style="color:#bf616a;">kubectl</span><span> get deployment</span><span style="color:#bf616a;"> -o</span><span> yaml  | </span><span style="color:#bf616a;">grep</span><span> image:
+</span><span>        </span><span style="color:#bf616a;">-</span><span> image: my-deployment:v0.20.4
+</span><span>
+</span></code></pre>
+<p>I would often ignore this and fixed the deployment manually, but it would return every deploy. Finally, I dug a bunch through GitHub and found the <a href="https://github.com/helm/helm/issues/12687">following issue</a>, with this helpful text</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>I found the issue. It was previously supplied individual value overrides being provided by --set getting persisted in the release secrets and then re-applied when the manifest got rendered again. Using helm -n sentry get values sentry revealed the saved override and then using --reset-values when running helm upgrade or helm diff upgrade removed its application
+</span></code></pre>
+<p>So I looked at my own configuration and sure enough I had the values from the last time I used --set to override the yaml.</p>
+<pre data-lang="bash" style="background-color:#2b303b;color:#c0c5ce;" class="language-bash "><code class="language-bash" data-lang="bash"><span style="color:#bf616a;">helm -n</span><span> myns get values my-deployment
+</span><span style="color:#bf616a;">USER-SUPPLIED</span><span> VALUES:
+</span><span style="color:#bf616a;">image:
+</span><span>  </span><span style="color:#bf616a;">tag:</span><span> 0.20.11
+</span><span style="color:#bf616a;">replicaCount:</span><span> 3
+</span></code></pre>
+<p>I fixed it with the following command:</p>
+<pre data-lang="bash" style="background-color:#2b303b;color:#c0c5ce;" class="language-bash "><code class="language-bash" data-lang="bash"><span style="color:#bf616a;">helm</span><span> upgrade</span><span style="color:#bf616a;"> -n</span><span> myns my-deployment ./my-chart</span><span style="color:#bf616a;"> --reset-values
+</span></code></pre>
+<p>Now when I retrieved the values I got a nice blank and subsequent upgrades worked as expected.</p>
+<pre data-lang="bash" style="background-color:#2b303b;color:#c0c5ce;" class="language-bash "><code class="language-bash" data-lang="bash"><span style="color:#bf616a;">helm -n</span><span> myns get values my-deployment       
+</span><span style="color:#bf616a;">USER-SUPPLIED</span><span> VALUES:
+</span><span style="color:#bf616a;">null
+</span></code></pre>
+<h2 id="takeway">Takeway</h2>
+<p>I learned three important things from this:</p>
+<ul>
+<li>Avoid --set (or be prepared to always use the same options forever)</li>
+<li>Use the values.yaml to set your values</li>
+<li>If you ever have weird values showing up in a helm upgrade get it with <code>helm get values</code></li>
+</ul>
+
+    </div>
+
+    
+        <footer>
+            <hr>
+            <p>
+                
+                
+                
+            </p>
+            
+            
+        </footer>
+    
+</article>
+
+
+    </body>
+
+</html>

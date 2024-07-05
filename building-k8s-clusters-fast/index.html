@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+      <meta http-equiv="X-UA-Compatible" content="IE=edge">
+      <meta http-equiv="content-type" content="text/html; charset=utf-8">
+
+      <!-- Enable responsiveness on mobile devices-->
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    
+      
+    
+
+      <title></title>
+
+      
+
+      
+          <link rel="stylesheet" href="https://rsvihladremio.github.io/site.css">
+      
+
+      
+      
+    </head>
+
+    <body class="hack dark main container">
+        
+    
+        
+                
+            
+    
+
+<article itemscope itemtype="http://schema.org/BlogPosting">
+    <header>
+        <h1 itemprop="headline">Building K8s Clusters Fast</h1>
+        <span class="muted">
+    <svg class="icon i-clock" viewBox="0 0 32 32"
+         width="16" height="16" fill="none" stroke="currentcolor"
+         stroke-linecap="round" stroke-linejoin="round" stroke-width="6.25%">
+        <circle cx="16" cy="16" r="14"/>
+        <path d="M16 8 L16 16 20 20"/>
+    </svg>
+    <span>3 minute read</span>
+    <svg class="icon i-edit" viewBox="0 0 32 32"
+         width="16" height="16" fill="none" stroke="currentcolor"
+         stroke-linecap="round" stroke-linejoin="round" stroke-width="6.25%">
+        <path d="M30 7 L25 2 5 22 3 29 10 27 Z M21 6 L26 11 Z M5 22 L10 27 Z"/>
+    </svg>
+
+    Published: 2024-05-17
+</span>
+    </header>
+    <div itemprop="articleBody">
+      <p>Spinning up a k8s cluster is easier than ever, but there are a ton of options and there are some trade offs. I tend nowadays to focus on the <a href="https://k3s.io/">k3s</a> stack as there are a number of ways to use it.</p>
+<ul>
+<li><a href="https://k3s.io/">Generic Install</a> which works everywhere except Mac.. so we're aren't going to cover that.</li>
+<li>Dev focused on your notebook using <a href="https://k3d.io/v5.6.3/">k3d</a> which is pretty easy, but not for real clusters.</li>
+<li><a href="https://github.com/alexellis/k3sup">k3sup</a> works everywhere which is what I'm going to cover here</li>
+</ul>
+<h2 id="spinning-up-cloud-instances">Spinning up cloud instances</h2>
+<p>The gcloud command makes things a snap, typically I use the console to build a command before adding it to a script to spin up several nodes, but roughly something like this will work</p>
+<pre data-lang="bash" style="background-color:#2b303b;color:#c0c5ce;" class="language-bash "><code class="language-bash" data-lang="bash"><span>  </span><span style="color:#65737e;">#!/bin/bash
+</span><span>
+</span><span>  </span><span style="color:#b48ead;">if </span><span style="color:#96b5b4;">[ </span><span>&quot;$</span><span style="color:#bf616a;">1</span><span>&quot; = &quot;&quot; </span><span style="color:#96b5b4;">]
+</span><span>  </span><span style="color:#b48ead;">then
+</span><span>    </span><span style="color:#96b5b4;">echo </span><span>&quot;</span><span style="color:#a3be8c;">Usage: spawn-node.sh &lt;node name&gt;</span><span>&quot;
+</span><span>    </span><span style="color:#96b5b4;">exit
+</span><span>  </span><span style="color:#b48ead;">fi
+</span><span>
+</span><span>  </span><span style="color:#bf616a;">NODE</span><span>=$</span><span style="color:#bf616a;">1
+</span><span>  </span><span style="color:#bf616a;">gcloud</span><span> compute instances create \
+</span><span>      $</span><span style="color:#bf616a;">NODE --project</span><span>=project-abc\
+</span><span style="color:#bf616a;">      --zone</span><span>=us-west1-c \
+</span><span style="color:#bf616a;">      --machine-type</span><span>=e2-standard-4 \
+</span><span style="color:#bf616a;">      --network-interface</span><span>=network-tier=PREMIUM,stack-type=IPV4_ONLY,subnet=MY_SUBNET\
+</span><span style="color:#bf616a;">      --maintenance-policy</span><span>=MIGRATE \
+</span><span style="color:#bf616a;">      --provisioning-model</span><span>=STANDARD \
+</span><span style="color:#bf616a;">      --service-account</span><span>=&lt;SERVICE_ACCOUNT&gt;-developer.gserviceaccount.com \
+</span><span style="color:#bf616a;">      --scopes</span><span>=https://www.googleapis.com/auth/devstorage.read_only,https://www.googleapis.com/auth/logging.write,https://www.googleapis.com/auth/monitoring.write,https://www.googleapis.com/auth/servicecontrol,https://www.googleapis.com/auth/service.management.readonly,https://www.googleapis.com/auth/trace.append \
+</span><span style="color:#bf616a;">      --create-disk</span><span>=auto-delete=yes,boot=yes,device-name=$</span><span style="color:#bf616a;">NODE</span><span>,image=projects/debian-cloud/global/images/debian-12-bookworm-v20240415,mode=rw,size=100,type=projects/project-abc/zones/us-west1-c/diskTypes/
+</span><span>      </span><span style="color:#bf616a;">--no-shielded-secure-boot </span><span>\
+</span><span style="color:#bf616a;">      --shielded-vtpm </span><span>\
+</span><span style="color:#bf616a;">      --shielded-integrity-monitoring </span><span>\
+</span><span style="color:#bf616a;">      --reservation-affinity</span><span>=any
+</span></code></pre>
+<p>Then go ahead and spin up 3 nodes:</p>
+<pre data-lang="bash" style="background-color:#2b303b;color:#c0c5ce;" class="language-bash "><code class="language-bash" data-lang="bash"><span style="color:#bf616a;">spawn-node.sh</span><span> k8s-master
+</span><span style="color:#bf616a;">spawn-node.sh</span><span> k8s-worker-1
+</span><span style="color:#bf616a;">spawn-node.sh</span><span> k8s-worker-2
+</span></code></pre>
+<h3 id="install-k3sup">Install k3sup</h3>
+<p>Since this documentation may not age well check out <a href="https://github.com/alexellis/k3sup">the k3sup docs</a> for the latest information, but this was correct as of May 21st, 2024.</p>
+<pre data-lang="bash" style="background-color:#2b303b;color:#c0c5ce;" class="language-bash "><code class="language-bash" data-lang="bash"><span style="color:#65737e;"># install k3sup
+</span><span style="color:#bf616a;">curl -sLS</span><span> https://get.k3sup.dev | </span><span style="color:#bf616a;">sh
+</span><span style="color:#bf616a;">sudo</span><span> chmod +x k3sup
+</span><span style="color:#bf616a;">sudo</span><span> mv k3sup /usr/local/bin/
+</span></code></pre>
+<p>Then write the following script to install the cluster</p>
+<pre data-lang="bash" style="background-color:#2b303b;color:#c0c5ce;" class="language-bash "><code class="language-bash" data-lang="bash"><span style="color:#65737e;">#!/bin/bash
+</span><span>
+</span><span>
+</span><span style="color:#b48ead;">if </span><span style="color:#96b5b4;">[ </span><span>&quot;$</span><span style="color:#bf616a;">1</span><span>&quot; = &quot;&quot; </span><span style="color:#96b5b4;">]
+</span><span style="color:#b48ead;">then
+</span><span>  </span><span style="color:#96b5b4;">echo </span><span>&quot;</span><span style="color:#a3be8c;">Usage: launch-k3s.sh &lt;master ip&gt; &lt;comma separated list of node ips&gt; &lt;node user&gt;</span><span>&quot;
+</span><span>  </span><span style="color:#96b5b4;">exit
+</span><span style="color:#b48ead;">fi
+</span><span>
+</span><span style="color:#b48ead;">if </span><span style="color:#96b5b4;">[ </span><span>&quot;$</span><span style="color:#bf616a;">2</span><span>&quot; = &quot;&quot; </span><span style="color:#96b5b4;">]
+</span><span style="color:#b48ead;">then
+</span><span>  </span><span style="color:#96b5b4;">echo </span><span>&quot;</span><span style="color:#a3be8c;">Usage: launch-k3s.sh &lt;master ip&gt; &lt;comma separated list of node ips&gt; &lt;node user&gt;</span><span>&quot;
+</span><span>  </span><span style="color:#96b5b4;">exit
+</span><span style="color:#b48ead;">fi
+</span><span>
+</span><span style="color:#b48ead;">if </span><span style="color:#96b5b4;">[ </span><span>&quot;$</span><span style="color:#bf616a;">2</span><span>&quot; = &quot;&quot; </span><span style="color:#96b5b4;">]
+</span><span style="color:#b48ead;">then
+</span><span>  </span><span style="color:#96b5b4;">echo </span><span>&quot;</span><span style="color:#a3be8c;">Usage: launch-k3s.sh &lt;master ip&gt; &lt;comma separated list of node ips&gt; &lt;node user&gt;</span><span>&quot;
+</span><span>  </span><span style="color:#96b5b4;">exit
+</span><span style="color:#b48ead;">fi
+</span><span>
+</span><span style="color:#bf616a;">MASTER_IP</span><span>=$</span><span style="color:#bf616a;">1
+</span><span style="color:#bf616a;">NODE_IPS</span><span>=$</span><span style="color:#bf616a;">2
+</span><span style="color:#bf616a;">USER</span><span>=$</span><span style="color:#bf616a;">3
+</span><span>
+</span><span style="color:#bf616a;">k3sup</span><span> install</span><span style="color:#bf616a;"> --ip </span><span>$</span><span style="color:#bf616a;">MASTER_IP --user </span><span>$</span><span style="color:#bf616a;">USER
+</span><span style="color:#bf616a;">IFS</span><span>=&#39;</span><span style="color:#a3be8c;">, </span><span>&#39; </span><span style="color:#96b5b4;">read </span><span style="color:#bf616a;">-r -a</span><span> array &lt;&lt;&lt; &quot;$</span><span style="color:#bf616a;">NODE_IPS</span><span>&quot;
+</span><span>
+</span><span style="color:#b48ead;">for</span><span> NODE_IP </span><span style="color:#b48ead;">in </span><span>&quot;$</span><span style="color:#a3be8c;">{</span><span style="color:#bf616a;">array[@]</span><span style="color:#a3be8c;">}</span><span>&quot;
+</span><span style="color:#b48ead;">do
+</span><span>    </span><span style="color:#bf616a;">k3sup</span><span> join</span><span style="color:#bf616a;"> --ip </span><span>$</span><span style="color:#bf616a;">NODE_IP --server-ip </span><span>$</span><span style="color:#bf616a;">MASTER_IP --user </span><span>$</span><span style="color:#bf616a;">USER
+</span><span style="color:#b48ead;">done
+</span></code></pre>
+<p>Then once done, you can simply install your cluster with a simple call (assuming master of 192.168.1.100 and workers of 192.168.1.101, 192.168.1.102)</p>
+<pre data-lang="bash" style="background-color:#2b303b;color:#c0c5ce;" class="language-bash "><code class="language-bash" data-lang="bash"><span style="color:#bf616a;">launch-k3s.sh</span><span> 192.168.1.100 192.168.1.101,192.168.1.102 admin-user  
+</span></code></pre>
+
+    </div>
+
+    
+        <footer>
+            <hr>
+            <p>
+                
+                
+                
+            </p>
+            
+            
+        </footer>
+    
+</article>
+
+
+    </body>
+
+</html>
