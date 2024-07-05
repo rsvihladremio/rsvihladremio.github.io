@@ -56,7 +56,7 @@
 <p>Connect to Dremio Cloud from Python is challenging for certain platforms namely the M1 mac. When using ODBC on Apple Silicon one needs to:</p>
 <ul>
 <li>Install Rosetta <code>/usr/sbin/softwareupdate --install-rosetta --agree-to-license</code></li>
-<li>Install homebrew as amd64 <code>arch -x86_64 /bin/bash -c &quot;$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)&quot;</code></li>
+<li>Install homebrew as amd64 <code>arch -x86_64 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"</code></li>
 <li>Using the same trick install Python <code>arch -x86_64 /usr/local/bin/brew install python</code></li>
 <li>Install PyODBC <code>pip install pyodbc</code></li>
 <li>Install <a href="https://www.dremio.com/drivers/odbc/">Dremio Mac driver</a></li>
@@ -64,7 +64,7 @@
 </ul>
 <h2 id="jdbc-cross-platform-but-limited">JDBC Cross-Platform but Limited</h2>
 <p><a href="https://pypi.org/project/JayDeBeApi/">JayDeBeAPI</a> at least is available and does some amazing slight of hand using <a href="https://jpype.readthedocs.io/en/latest/">JPype</a> to permit easy access to JDBC drivers into Python.
-This effectively solves the cross platform development challenges. But it hasn't been updated in 3 years and does not work with JDK 9+. </p>
+This effectively solves the cross platform development challenges. But it hasn't been updated in 3 years and does not work with JDK 9+.</p>
 <ul>
 <li>Install JDK 8 <a href="https://github.com/baztian/jaydebeapi/pull/116">since one cannot easily pass through JVM settings</a></li>
 <li>Download <a href="https://www.dremio.com/drivers/jdbc/">The JDBC driver</a></li>

@@ -54,16 +54,16 @@
     <div itemprop="articleBody">
       <h2 id="history">History</h2>
 <p>I have a long tortured history with Helm. I was at a tiny startup many years ago that only wanted to use the latest and greatest for our core product (this was a bad idea btw). I was tasked with implementing a feature using the very bleeding edge <a href="https://www.openservicebrokerapi.org/">Open Service Broker API</a> (this was 2016 mind you), and adding support for custom Helm charts to be uploaded to the catalog. This got nowhere quickly, as just getting things to compile back then was complicated.</p>
-<p>I being the sort of &quot;get it done&quot; type of developer who sometimes will do horrible things to ship, I jettisoned Open Service Broker API and settled on the advanced pattern of &quot;just using Helm&quot; so I wrote a service that just shelled out to Helm:</p>
+<p>I being the sort of "get it done" type of developer who sometimes will do horrible things to ship, I jettisoned Open Service Broker API and settled on the advanced pattern of "just using Helm" so I wrote a service that just shelled out to Helm:</p>
 <ul>
 <li>The customer would be presented with a list of charts to pick from, as well as they were given an upload box for their custom helm charts.</li>
 <li>I would populate a form from the options and values in the values.yaml</li>
 <li>The customer could then pass whatever configuration options they wanted and click deploy</li>
 <li>On the backend i'd read the options passed and use --set with the option key and custom value to pass them onto Helm. Effectively I called `helm install my-deployment --set myoption=1 ./chartdir. Suprisingly to everyone, myself included, this worked <em>very</em> <em>well</em>.</li>
 </ul>
-<p>This experienced turned out to be useful, the startup died under the weight of of hot bleeding edge tech and an MVP with endless feature lists, but the skills I learned with Go, Kubernetes, and Helm paid my bills in the years to come. I ended up being &quot;an expert&quot; in these technologies mostly by virtue of having done a bunch of stupid things early on in the hype cycle.</p>
+<p>This experienced turned out to be useful, the startup died under the weight of of hot bleeding edge tech and an MVP with endless feature lists, but the skills I learned with Go, Kubernetes, and Helm paid my bills in the years to come. I ended up being "an expert" in these technologies mostly by virtue of having done a bunch of stupid things early on in the hype cycle.</p>
 <h3 id="bad-habits">Bad Habits</h3>
-<p>With my success using <code>--set</code> I got very much in the habit of just using values.yaml as a defaults file and then overriding it with <code>--set</code> for all deployments. I would even script this or automate this as much as possible. </p>
+<p>With my success using <code>--set</code> I got very much in the habit of just using values.yaml as a defaults file and then overriding it with <code>--set</code> for all deployments. I would even script this or automate this as much as possible.</p>
 <p>However, at some point I wanted to get away from people running custom scripts to use an industry standard tool, about a month ago I removed the scripts and just started documenting how to run Helm in my projects. I was proud to follow industry practice. But then I got lots of the following after upgrades:</p>
 <pre data-lang="bash" style="background-color:#2b303b;color:#c0c5ce;" class="language-bash "><code class="language-bash" data-lang="bash"><span style="color:#bf616a;">kubectl</span><span> get pods</span><span style="color:#bf616a;"> -n</span><span> myns
 </span><span style="color:#bf616a;">NAME</span><span>                          READY   STATUS             RESTARTS   AGE
